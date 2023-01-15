@@ -1,14 +1,17 @@
-;;; cov.el --- Show coverage stats in the fringe. -*- lexical-binding: t -*-
+;;; cov.el --- Overlay coverage info. -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2016-2017 Adam Niederer
+;; Copyright (C) 2021 Christian Hopps
 
 ;; Author: Adam Niederer
 ;; Maintainer: Adam Niederer
 ;; Created: 12 Aug 2016
 
 ;; Keywords: coverage gcov c lcov coveralls clover
-;; Homepage: https://github.com/AdamNiederer/cov
-;; Version: 0.1.0
+;; Package-Version: 20230115.55650
+;; Homepage: https://github.com/choppv1/cov
+;; Original Homepage: https://github.com/AdamNiederer/cov
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "24.4") (f "0.18.2") (s "1.11.0") (elquery))
 
 ;; This file is not part of GNU Emacs.
@@ -29,7 +32,7 @@
 ;;; Commentary:
 
 ;; This mode locates and parses multiple coverage formats and display
-;; coverage using fringe overlays.
+;; coverage using overlays.
 
 ;;; Code:
 
@@ -40,6 +43,11 @@
 (require 'subr-x)
 (require 'filenotify)
 (require 'elquery)
+
+(defun cov--get-highlight-tint (color light-bg)
+  "Return a brighter color from FACE foreground."
+  (let ((hlcolor (apply #'color-rgb-to-hsl (color-name-to-rgb color))))
+    (apply #'color-rgb-to-hex (color-hsl-to-rgb (nth 0 hlcolor) (nth 1 hlcolor) (if light-bg 0.9 0.1)))))
 
 (defgroup cov nil
   "The group for everything in cov.el."
@@ -115,6 +123,9 @@ This face is applied if no other face is applied."
   :tag "Cov never-used face"
   :group 'cov-faces)
 
+;; We actually want to dynamically grab the background tint from the line being
+;; overlayed, instead of just a very dark version of a static color
+
 (defface cov-coverage-run-face
   '((((class color)) :foreground "green"))
   "Fringe indicator face used in coverage mode for lines which were run.
@@ -128,6 +139,29 @@ See `cov-coverage-mode'"
   "Fringe indicator face used in coverage mode for lines which were not run.
 See `cov-coverage-mode'"
   :tag "Cov coverage mode not-run face"
+  :group 'cov-faces)
+
+(defface cov-coverage-run-bg-face
+    `((((class color) (background light))
+      :background ,(cov--get-highlight-tint "green" t) :extend t)
+      (((class color) (background dark))
+      :background ,(cov--get-highlight-tint "green" nil) :extend t)
+      (t :inverse-video t))
+  "Fringe indicator face used in coverage mode for lines which were run.
+
+See `cov-coverage-mode'"
+  :tag "Cov coverage mode run bg face"
+  :group 'cov-faces)
+
+(defface cov-coverage-not-run-bg-face
+  `((((class color) (background light))
+     :background ,(cov--get-highlight-tint "red" t) :weight bold :extend t)
+    (((class color) (background dark))
+     :background ,(cov--get-highlight-tint "red" nil) :weight bold :extend t)
+    (t :inverse-video t))
+  "Fringe indicator face used in coverage mode for lines which were not run.
+See `cov-coverage-mode'"
+  :tag "Cov coverage mode not-run bg face"
   :group 'cov-faces)
 
 (defvar cov-coverage-alist '((".gcov" . gcov))
@@ -532,16 +566,17 @@ Load FILE-PATH into temp buffer and parse it using `cov--FORMAT-parse'.
     (setq-local cov-coverage-file file-path)
     (funcall (intern (concat "cov--"  (symbol-name format) "-parse")))))
 
-(defun cov--make-overlay (line fringe help)
+(defun cov--make-overlay (line fringe help highlight)
   "Create an overlay for the LINE.
 
 Uses the FRINGE and sets HELP as `help-echo'."
   (let ((ol (save-excursion
               (goto-char (point-min))
               (forward-line (1- line))
-              (make-overlay (point) (line-end-position)))))
+              (make-overlay (point) (1+ (line-end-position))))))
     (overlay-put ol 'before-string fringe)
     (overlay-put ol 'help-echo help)
+    (overlay-put ol 'face highlight)
     (overlay-put ol 'cov t)
     ol))
 
@@ -563,6 +598,17 @@ execution frequency"
     'cov-light-face)
    (t 'cov-none-face)))
 
+(defun cov--get-bg-face (percentage)
+  "Get the appropriate BG face for the PERCENTAGE coverage.
+
+Selects the face depending on user preferences"
+  (cond
+   ((> percentage 0)
+    'cov-coverage-run-bg-face)
+   ((= percentage 0)
+    'cov-coverage-not-run-bg-face)
+   (t 'cov-none-face)))
+
 (defun cov--get-fringe (percentage)
   "Return the fringe with the correct face for PERCENTAGE."
   (propertize "f" 'display `(left-fringe ,cov-fringe-symbol ,(cov--get-face percentage))))
@@ -580,7 +626,8 @@ MAX is the maximum coverage count for any line in the file."
     (cov--make-overlay
      (car line)
      (cov--get-fringe percentage)
-     (cov--help times-executed percentage))))
+     (cov--help times-executed percentage)
+     (cov--get-bg-face percentage))))
 
 (defsubst cov--file-mtime (file)
   "Return the last modification time of FILE."
