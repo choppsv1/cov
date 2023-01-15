@@ -147,7 +147,7 @@ See `cov-coverage-mode'"
       (((class color) (background dark))
       :background ,(cov--get-highlight-tint "green" nil) :extend t)
       (t :inverse-video t))
-  "Fringe indicator face used in coverage mode for lines which were run.
+  "Face used in coverage mode for lines which were run.
 
 See `cov-coverage-mode'"
   :tag "Cov coverage mode run bg face"
@@ -159,9 +159,20 @@ See `cov-coverage-mode'"
     (((class color) (background dark))
      :background ,(cov--get-highlight-tint "red" nil) :weight bold :extend t)
     (t :inverse-video t))
-  "Fringe indicator face used in coverage mode for lines which were not run.
+  "Face used in coverage mode for lines which were not run.
 See `cov-coverage-mode'"
   :tag "Cov coverage mode not-run bg face"
+  :group 'cov-faces)
+
+(defface cov-coverage-wont-run-bg-face
+  `((((class color) (background light))
+     :background ,(cov--get-highlight-tint "white" t) :weight bold :extend t)
+    (((class color) (background dark))
+     :background ,(cov--get-highlight-tint "white" nil) :weight bold :extend t)
+    (t :inverse-video t))
+  "Face used in coverage mode for lines which will never run.
+See `cov-coverage-mode'"
+  :tag "Cov coverage mode wont-run bg face"
   :group 'cov-faces)
 
 (defvar cov-coverage-alist '((".gcov" . gcov))
@@ -607,7 +618,8 @@ Selects the face depending on user preferences"
     'cov-coverage-run-bg-face)
    ((= percentage 0)
     'cov-coverage-not-run-bg-face)
-   (t 'cov-none-face)))
+   (t
+   'cov-coverage-wont-run-bg-face)))
 
 (defun cov--get-fringe (percentage)
   "Return the fringe with the correct face for PERCENTAGE."
